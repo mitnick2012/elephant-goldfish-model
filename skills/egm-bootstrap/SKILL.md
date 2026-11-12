@@ -45,6 +45,8 @@ If your harness has no subagent tool, run the scout steps inline.
     (Optional, default: `"README.md"`). Supports alternate blueprint filenames
     such as `"EGM.md"` when pre-existing human-maintained READMEs must not be
     modified.
+*   **`language_packs`**: Internal parameter. Absolute paths of packs loaded in
+    Steps 0 and 2 (Optional).
 
 ## Execution Constraints (CRITICAL)
 
@@ -71,26 +73,23 @@ If your harness has no subagent tool, run the scout steps inline.
 
 ## Workflow
 
-### Step 0: Ecosystem & Verification Discovery
+### Step 0: Language Routing & Verification Discovery
 
-1.  Inspect the repository root for package/build manifests:
-    *   Node.js / TypeScript: `package.json` -> `npm test` (or `pnpm test` / `yarn test`)
-    *   Rust: `Cargo.toml` -> `cargo test`
-    *   Go: `go.mod` -> `go test ./...`
-    *   Python: `pyproject.toml` / `pytest.ini` / `setup.py` -> `pytest`
-    *   .NET / C#: `*.sln` / `*.slnx` / `*.csproj` -> `dotnet test`
-    *   C/C++ / Make: `Makefile` -> `make test`
-    *   Bazel: `BUILD` / `BUILD.bazel` -> `bazel test //...`
-    *   None found: `<test-command>`
-2.  Record as `VerificationCommand` to populate generated README contracts.
+1.  Read the [language router](references/language-router.md) relative to
+    this skill directory and load language packs as it says. Packs add
+    detail; this file's constraints, safety gate, grounding, and link rules
+    always win.
+2.  Record each pack's Verification rule as `VerificationCommand`. If none
+    applies, use `<test-command>`.
 
 ---
 
 ### Step 1: Startup Branching Control
 
 1.  Check the `is_worker` input parameter.
-2.  If `is_worker` is `true`, jump directly to **Step 4: Sub-Orchestrator Worker
-    Flow** to process the assigned `sub_tree_root`.
+2.  If `is_worker` is `true`, read `language_packs` (or route per the
+    router if unset), then jump directly to **Step 4: Sub-Orchestrator
+    Worker Flow** to process the assigned `sub_tree_root`.
 3.  If `is_worker` is `false` or unset, proceed as the Root Orchestrator to
     **Step 2: Incremental Scoping & Safety Gate**.
 
@@ -104,11 +103,11 @@ If your harness has no subagent tool, run the scout steps inline.
     *   Preserve intermediate folder nodes.
     *   Ignore symbolic links to prevent infinite recursion.
     *   Ignore hidden/system directories (`.git`, `.antigravity`, `node_modules`,
-        `venv`, `dist`, `build`, `third_party`).
+        `venv`, `dist`, `build`, `third_party`) and loaded packs' Ignored
+        Paths (scoped per the router).
     *   Read `.gitignore` and `.egmignore` (if present) and ignore matching glob patterns.
-    *   Preserve package and build manifests (`package.json`, `Cargo.toml`,
-        `go.mod`, `pyproject.toml`, `*.sln`, `*.csproj`, `Makefile`, `BUILD`) in
-        the discovery map to extract verification targets later.
+    *   Preserve the router's manifests, `Makefile`, and `BUILD` files in the
+        discovery map to extract verification targets later.
 
 2.  **Safety Gate & Unbounded Spawning Approval (CRITICAL)**: During the BFS
     loop, if the total running count of discovered directories exceeds **15**,
@@ -128,25 +127,12 @@ If your harness has no subagent tool, run the scout steps inline.
     walk the mapped tree bottom-up (leaves to root). Filter out non-code and
     test-only directories:
 
-    *   *Source Code Files*: Files matching recognized source code, schema, and
-        contract extensions:
-        - Systems & Compiled: `.c`, `.cc`, `.cpp`, `.cxx`, `.h`, `.hh`, `.hpp`,
-          `.rs`, `.go`, `.zig`, `.lean`, `.f`, `.f90`, `.f95`, `.f03`, `.f08`,
-          `.hs`
-        - Managed & Enterprise: `.java`, `.kt`, `.scala`, `.cs`, `.razor`,
-          `.cshtml`, `.fs`, `.vb`
-        - Scripting & Dynamic: `.py`, `.rb`, `.php`, `.lua`, `.sh`, `.bash`,
-          `.ps1`, `.psm1`, `.psd1`, `.r`, `.R`, `.ex`, `.exs`
-        - Web & Mobile: `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.swift`,
-          `.m`, `.dart`
-        - Data & Schemas / IDLs: `.sql`, `.proto`, `.graphql`, `.gql`,
-          `.thrift`, `.prisma`
-        - Infrastructure / Declarative Code: `.tf`, `.hcl`, `.cue`
-        (Excludes build manifests, lockfiles, test fixtures, documentation, and
-        generic data dumps like `.csv`, `.tsv`, `.parquet`).
+    *   *Source Code Files*: Files matching the Source Extensions of any
+        loaded pack (never manifests, lockfiles, fixtures, docs, or data dumps).
     *   *Test Directory Exclusion*: Exclude directories containing exclusively
         test code (e.g. named `tests`, `testing`, `testdata`, or containing only
-        files matching `*_test.*`, `*Test.*`, `test_*.*`, or `*.spec.*`).
+        files matching `*_test.*`, `*Test.*`, `test_*.*`, or `*.spec.*`), and
+        anything matching a loaded pack's Test Conventions.
     *   *Non-Code Filtering*: Exclude any directory that contains no source code
         files AND contains no subdirectories with code. Retain empty
         intermediate folders only if they have child directories that contain
@@ -194,7 +180,8 @@ If your harness has no subagent tool, run the scout steps inline.
         *   Subagent: `egm-bootstrap-orchestrator` (`agents/bootstrap_orchestrator.md`) (or a general-purpose subagent)
         *   `Prompt`: "Run egm-bootstrap with path=`[path]`,
             is_worker=true, sub_tree_root=`[partition_root]`,
-            target_filename=`[target_filename]`."
+            target_filename=`[target_filename]`,
+            language_packs=`[absolute pack paths]`."
     *   **Unbounded Execution**: Spawn all Sub-Orchestrators in parallel without
         artificial concurrency limits (as authorized by the user during the
         safety gate).
@@ -218,7 +205,7 @@ If your harness has no subagent tool, run the scout steps inline.
         routes, status enums, or invariants from file or directory names
         alone; cite the exact `[file:symbol_or_flag]` for every entry, and
         output `["None"]` if no explicit invariants or side effects exist in
-        code.
+        code. Apply the router's Step 4 rules.
     *   `enable_write_tools`: `false`
     *   `enable_subagent_tools`: `false`
 
@@ -250,23 +237,25 @@ If your harness has no subagent tool, run the scout steps inline.
             non-test file in `D` is read in full. Bound each scout call to
             about **1,500 lines** of source instead: list top-level definitions
             (class/func/def/route/flag lines) with your search tool, cut the
-            directory's files into chunks at those boundaries (never mid-body;
-            small files share a chunk), spawn one `goldfish-explorer` per
+            directory's files into chunks at those boundaries (found with the
+            pack's Definition Patterns; never mid-body; small files share a
+            chunk), spawn one `goldfish-explorer` per
             chunk in parallel, and merge their JSON. Give each chunk the
             file's imports and top-level definition list so it can judge
             visibility. Check build-manifest deps and `import` / `#include`
             statements before attributing an RPC service, schema, or message
             type to a local file. Read non-test files in this order:
-            1.  Contracts, schemas, and build manifests (`.h`, `.hh`, `.hpp`,
-                `.proto`, `.graphql`, `.gql`, `.thrift`, `.prisma`, `.sql` DDL,
-                interface classes); extract exact DDL table names and exported
-                build targets.
-            2.  Module entry points (`main.*`, `index.*`, `lib.*`, `mod.*`,
-                `__init__.py`, or files matching directory name), then
-                production source/query files alphabetically.
+            1.  Contracts, schemas, and build manifests (`.proto`,
+                `.graphql`, `.thrift`, `.prisma`, `.sql` DDL, and the pack's
+                Read Order contracts); extract exact DDL table names and
+                exported build targets.
+            2.  Module entry points (`main.*`, `index.*`, or the pack's Read
+                Order entry points), then production source/query files
+                alphabetically.
             3.  Templates and configs: up to 200 lines each (800 in config-only
                 directories); exclude `.css`/`.scss`.
-            4.  Test files (`*_test.*`, `*Test.*`, `test_*.*`, `*.spec.*`):
+            4.  Test files (`*_test.*`, `*Test.*`, `test_*.*`, `*.spec.*`, and
+                loaded packs' Test Conventions):
                 ignore entirely, including in hybrid directories.
         *   *Child Fault Tolerance*: If the scout fails or times out, log a
             warning, use placeholder values `["(Details pending/documentation
@@ -292,10 +281,8 @@ If your harness has no subagent tool, run the scout steps inline.
             `//[package_path]:all`, never `//[package_path]...` or
             `//[package_path]:...`). Use `bazel run` for interactive runner
             targets.
-        *   If the project uses other manifests (`package.json`, `Cargo.toml`,
-            `go.mod`, `pyproject.toml`, `*.sln`, `*.csproj`, `Makefile`), populate
-            with the corresponding test runner command (.NET: `dotnet test` on
-            the nearest `*.csproj`).
+        *   Otherwise apply the Verification rule of the pack the router
+            selects for `D` (`Makefile`: `make test`).
         *   If no verification command is identified, omit or use a placeholder.
 
     *   **Directory Classification & Template Generation**: Generate or correct

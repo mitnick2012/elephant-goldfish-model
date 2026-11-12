@@ -15,3 +15,7 @@ Frontmatter and link checks run in `pytest tests/unit` (see [TESTING.md](../../T
    - Run in an environment without task delegation tools.
    - Verify that the agent reads source files and performs the scout steps inline, then generates and checks the contracts.
    - Repeat with more than 15 directories and verify that the user confirmation gate still applies.
+4. **Language Pack Routing**:
+   - Target a polyglot repository (for example a `*.slnx` at the root and a `package.json` in a subdirectory).
+   - Verify that the agent reads `references/lang-generic.md`, `lang-dotnet.md`, and `lang-typescript.md`, and no other pack.
+   - Verify that the .NET contracts skip `bin/` and `obj/`, omit `internal` members, and use `dotnet test` on the nearest test project.

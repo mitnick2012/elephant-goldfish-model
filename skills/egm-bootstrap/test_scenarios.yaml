@@ -72,3 +72,24 @@ scenarios:
           - type: "forbidden_pattern"
             pattern: "bazel (test|build) (\\.\\.\\.|//[\\w/]*\\w\\.\\.\\.|//[\\w/]+:\\.\\.\\.)"
             message: "Verification must not use bare '...', '//pkg...', or '//pkg:...' target patterns."
+
+  - scenario_id: "bootstrap_language_pack_routing"
+    description: "Verifies the root orchestrator routes a polyglot repository to every matching language pack plus the generic fallback."
+    eval_type: "deterministic"
+    system_prompt:
+      skill_file: "skills/egm-bootstrap/SKILL.md"
+    turns:
+      - user_input: "Before bootstrapping, list the language pack files you will read for a repository with Billing.slnx at the root and web/package.json in a subdirectory. Output only the pack file names you will read, one per line, with no other text."
+        assertions:
+          - type: "required_pattern"
+            pattern: "lang-dotnet\\.md"
+            message: "A .slnx manifest must route to the .NET pack."
+          - type: "required_pattern"
+            pattern: "lang-typescript\\.md"
+            message: "A package.json found in a subtree must route to the TypeScript pack."
+          - type: "required_pattern"
+            pattern: "lang-generic\\.md"
+            message: "The generic fallback pack must always be read."
+          - type: "forbidden_pattern"
+            pattern: "lang-(python|go|rust|jvm|cpp)\\.md"
+            message: "Unmatched packs must not be read."

@@ -35,6 +35,8 @@ REQUIRED_SHARED = (
     "resources/README.md", "resources/execution_instructions.md",
     "skills/egm-bootstrap/references/worker-return.schema.json",
     "skills/egm-bootstrap/references/templates.md",
+    "skills/egm-bootstrap/references/language-router.md",
+    "skills/egm-bootstrap/references/lang-generic.md",
     "skills/egm-draft/references/design_doc.md",
 ) + tuple(
     f"skills/{skill}/{name}"
